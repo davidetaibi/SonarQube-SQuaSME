@@ -20,8 +20,7 @@ public class Sonar {
 
     public static void main(String[] args) {
         //ignore args for now
-        final String projectKey = "cli";
-        final String projectName = "CLI";
+        final String projectKey = "sasabus";
         final String metricsFile = "metrics.txt";
         final String codesmellsFile = "codesmells.txt";
         String dateParam = null;
@@ -33,12 +32,67 @@ public class Sonar {
         System.out.println(codesmellsDefined.size() + " code smells: " + Arrays.toString(codesmellsDefined.toArray()));
 
 
-
-
         String fileOut = projectKey.replaceAll("\\.", "_").replaceAll(":", "_") + ".csv";
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(fileOut))) {
 
 
+
+            String header = "creation_date,update_date,status,issue_rule,class";
+            System.out.println(header);
+            bw.write(header + "\n");
+
+            int page = 1;
+            int pageSize = 100;
+            int totalItems = 1;
+            while ((page-1)*pageSize < totalItems) {
+                String issuesQuery = "http://sonar.inf.unibz.it/api/issues/search" +
+                //String issuesQuery = "http://localhost:9000/api/issues/search" +
+                        "?componentKeys=" + projectKey +
+                        "&tags=antipattern" +
+                        //"&ps=" + pageSize +
+                        "&p=" + page;
+                //((dateParam == null)? "" : "&fromDateTime=" + dateParam);
+                String sonarResult = getStringFromUrl(issuesQuery);
+                JSONObject mainObject = (JSONObject) parser.parse(sonarResult);
+                totalItems = Integer.parseInt(mainObject.get("total").toString());
+
+                JSONArray issuesArray = (JSONArray) mainObject.get("issues");
+                for (Object issueObject : issuesArray) {
+                    if (issueObject instanceof JSONObject) {
+                        String creationDate = ((JSONObject) issueObject).get("creationDate").toString();
+                        String updateDate = ((JSONObject) issueObject).get("updateDate").toString();
+                        String rule = ((JSONObject) issueObject).get("rule").toString();
+                        String status = ((JSONObject) issueObject).get("status").toString();
+                        String classname = ((JSONObject) issueObject).get("component").toString();
+                        classname = classname.replaceFirst(projectKey + ":", "");
+                        List<String> row = new ArrayList<>();
+
+                        if (status.equals("CLOSED")) {
+                            row.add(creationDate);
+                            row.add(updateDate);
+                            row.add(rule);
+                            row.add("OPEN");
+                            row.add(classname);
+                            bw.write(separatedByCommas(row) + "\n");
+                            row.clear();
+                            creationDate = updateDate;
+                        }
+
+                        row.add(creationDate);
+                        row.add(updateDate);
+                        row.add(rule);
+                        row.add(status);
+                        row.add(classname);
+                        System.out.println(separatedByCommas(row));
+                        bw.write(separatedByCommas(row) + "\n");
+
+
+                    }
+                }
+                page++;
+            }
+
+            /*
             /// get data from sonarqube
             String timeMachineQuery = "http://sonar.inf.unibz.it/api/timemachine/index" +
                     "?resource=" + projectKey +
@@ -46,6 +100,7 @@ public class Sonar {
                     ((dateParam == null)? "" : "&fromDateTime=" + dateParam);
             String sonarResult = getStringFromUrl(timeMachineQuery);
 
+            //int i = 0;
             JSONArray jsonArray = (JSONArray) parser.parse(sonarResult);
             // sonar returns array with just 1 element, this loop executes just once
             for(Object responseObj: jsonArray){
@@ -73,7 +128,7 @@ public class Sonar {
                     for(Object cellItem: cellArray){
                         if ( cellItem instanceof JSONObject ) {
                             List<String> row = new ArrayList<>();
-                            row.add(projectName);
+                            row.add(projectKey);
 
                             String cellItemDate = ((JSONObject) cellItem).get("d").toString();
                             row.add(cellItemDate);
@@ -99,19 +154,19 @@ public class Sonar {
                             }
 
                             //add jira BUG count for that day
-                            String[] dateParts = cellItemDate.split("T"); //but this is the whole day :o
-                            String dateForJira = dateParts[0];
-
-                            String jiraQueryString = "https://issues.apache.org/jira/rest/api/2/search?jql=";
-                            String jiraQueryPart = "project = " + projectName
-                                    + " and issuetype = BUG"
-                                    + " and created <= " + dateForJira;
-                            jiraQueryString += URLEncoder.encode(jiraQueryPart,"UTF-8");
-                            //issuetype = Bug AND resolved != null AND resolved < startOfMonth() AND status was Resolved BY Jsmith ORDER BY resolutiondate
-
-                            String jiraResult = getStringFromUrl(jiraQueryString);
-                            JSONObject jiraObj = (JSONObject) parser.parse(jiraResult);
-                            row.add(jiraObj.get("total").toString());
+//                            String[] dateParts = cellItemDate.split("T"); //but this is the whole day :o
+//                            String dateForJira = dateParts[0];
+//
+//                            String jiraQueryString = "https://issues.apache.org/jira/rest/api/2/search?jql=";
+//                            String jiraQueryPart = "project = " + projectKey
+//                                    + " and issuetype = BUG"
+//                                    + " and created <= " + dateForJira;
+//                            jiraQueryString += URLEncoder.encode(jiraQueryPart,"UTF-8");
+//                            //issuetype = Bug AND resolved != null AND resolved < startOfMonth() AND status was Resolved BY Jsmith ORDER BY resolutiondate
+//
+//                            String jiraResult = getStringFromUrl(jiraQueryString);
+//                            JSONObject jiraObj = (JSONObject) parser.parse(jiraResult);
+//                            row.add(jiraObj.get("total").toString());
 
 
                             // finally write row to file
@@ -119,7 +174,7 @@ public class Sonar {
                         }
                     }
                 }
-            }
+            }*/
             System.out.println("Data saved to " + fileOut);
         } catch (IOException e) {
             System.out.println("Read/write error");
